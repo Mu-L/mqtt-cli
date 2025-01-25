@@ -23,8 +23,8 @@ plugins {
     alias(libs.plugins.defaults)
     alias(libs.plugins.nebula.ospackage)
     alias(libs.plugins.launch4j)
+    alias(libs.plugins.oci)
     alias(libs.plugins.openapi.generator)
-    alias(libs.plugins.jib)
     alias(libs.plugins.license)
     alias(libs.plugins.forbiddenApis)
     alias(libs.plugins.githubRelease)
@@ -35,8 +35,8 @@ plugins {
 
 /* ******************** metadata ******************** */
 
-val prevVersion = "4.23.0"
-version = "4.24.0"
+val prevVersion = "4.34.0"
+version = "4.35.0"
 group = "com.hivemq"
 description = "MQTT CLI is a tool that provides a feature rich command line interface for connecting, " + //
         "publishing, subscribing, unsubscribing and disconnecting " + //
@@ -50,13 +50,13 @@ application {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(11)
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }
 
 tasks.compileJava {
     javaCompiler = javaToolchains.compilerFor {
-        languageVersion = JavaLanguageVersion.of(8)
+        languageVersion = JavaLanguageVersion.of(11)
     }
 }
 
@@ -64,12 +64,12 @@ tasks.jar {
     manifest.attributes(
         "Built-JDK" to System.getProperty("java.version"),
         "Implementation-Title" to "MQTT CLI",
-        "Implementation-Version" to project.version,
+        "Implementation-Version" to provider { project.version.toString() },
         "Implementation-Vendor" to "HiveMQ GmbH",
         "Specification-Title" to "MQTT CLI",
-        "Specification-Version" to project.version,
+        "Specification-Version" to provider { project.version.toString() },
         "Specification-Vendor" to "HiveMQ GmbH",
-        "Main-Class" to application.mainClass.get(),
+        "Main-Class" to application.mainClass,
         "Built-Date" to SimpleDateFormat("yyyy-MM-dd").format(Date()),
     )
 }
@@ -120,14 +120,6 @@ dependencies {
     implementation(libs.netty.codec.http)
     implementation(variantOf(libs.netty.transport.native.epoll) { classifier("linux-x86_64") })
     implementation(libs.openCsv)
-    constraints {
-        implementation(libs.apache.commonsText) {
-            because(
-                "Force a commons-text version that does not contain CVE-2022-42889, " + //
-                        "because opencsv brings the vulnerable version 1.9 as transitive dependency"
-            )
-        }
-    }
 }
 
 /* ******************** OpenAPI ******************** */
@@ -167,51 +159,52 @@ dependencies {
 }
 
 val generateHivemqOpenApi by tasks.registering(GenerateTask::class) {
-    group = "hivemq"
+    group = "openapi"
     generatorName = "java"
-    inputSpec = hivemqOpenApi.singleFile.path
-    outputDir = layout.buildDirectory.dir("tmp/$name").get().asFile.absolutePath
+    inputSpec = hivemqOpenApi.elements.map { it.single().asFile.path }
+    val outputDir = layout.buildDirectory.dir("tmp/$name")
+    this.outputDir = outputDir.map { it.asFile.absolutePath }
+    cleanupOutput = true
+
     apiPackage = "com.hivemq.cli.openapi.hivemq"
     modelPackage = "com.hivemq.cli.openapi.hivemq"
-    configOptions.put("dateLibrary", "java8")
+    modelNamePrefix = "HivemqOpenapi"
     configOptions.put("hideGenerationTimestamp", "true")
+    configOptions.put("openApiNullable", "false")
 
-    inputs.file(hivemqOpenApi.elements.map { it.first() }).withPropertyName("inputSpec")
-        .withPathSensitivity(PathSensitivity.NONE)
     val outputSrcDir = layout.buildDirectory.dir("generated/openapi/hivemq/java")
     outputs.dir(outputSrcDir).withPropertyName("outputSrcDir")
     outputs.cacheIf { true }
-    doFirst { delete(outputDir) }
+
     doLast {
-        sync {
-            from("${outputDir.get()}/src/main/java")
-            into(outputSrcDir)
-        }
+        outputSrcDir.get().asFile.deleteRecursively()
+        outputDir.get().asFile.resolve("src/main/java").copyRecursively(outputSrcDir.get().asFile)
+        outputDir.get().asFile.deleteRecursively()
     }
 }
 
 val generateSwarmOpenApi by tasks.registering(GenerateTask::class) {
-    group = "swarm"
+    group = "openapi"
     generatorName = "java"
-    inputSpec = swarmOpenApi.singleFile.path
-    outputDir = layout.buildDirectory.dir("tmp/$name").get().asFile.absolutePath
+    inputSpec = swarmOpenApi.elements.map { it.single().asFile.path }
+    val outputDir = layout.buildDirectory.dir("tmp/$name")
+    this.outputDir = outputDir.map { it.asFile.absolutePath }
+    cleanupOutput = true
+
     apiPackage = "com.hivemq.cli.openapi.swarm"
     modelPackage = "com.hivemq.cli.openapi.swarm"
-    configOptions.put("dateLibrary", "java8")
     configOptions.put("hideGenerationTimestamp", "true")
+    configOptions.put("openApiNullable", "false")
 
-    inputs.file(swarmOpenApi.elements.map { it.first() }).withPropertyName("inputSpec")
-        .withPathSensitivity(PathSensitivity.NONE)
     val outputSrcDir = layout.buildDirectory.dir("generated/openapi/swarm/java")
     outputs.dir(outputSrcDir).withPropertyName("outputSrcDir")
     outputs.cacheIf { true }
-    doFirst { delete(outputDir) }
+
     doLast {
-        sync {
-            from("${outputDir.get()}/src/main/java")
-            into(outputSrcDir)
-            include("${apiPackage.get().replace('.', '/')}/**")
-        }
+        outputSrcDir.get().asFile.deleteRecursively()
+        val path = apiPackage.get().replace('.', '/')
+        outputDir.get().asFile.resolve("src/main/java/$path").copyRecursively(outputSrcDir.get().asFile.resolve(path))
+        outputDir.get().asFile.deleteRecursively()
     }
 }
 
@@ -240,7 +233,6 @@ testing {
 
         val test by getting(JvmTestSuite::class) {
             dependencies {
-                implementation(libs.junit.systemExit)
                 implementation(libs.mockito)
                 implementation(libs.okhttp.mockWebserver)
             }
@@ -251,10 +243,10 @@ testing {
 
             dependencies {
                 implementation(libs.awaitility)
-                implementation(libs.hivemq.testcontainer.junit5)
-                implementation(libs.junit.systemExit)
+                implementation(libs.gradleOci.junitJupiter)
                 implementation(libs.mockito)
-                implementation(libs.testcontainers)
+                implementation(libs.testcontainers.junitJupiter)
+                implementation(libs.testcontainers.hivemq)
 
                 implementation(libs.dagger)
                 implementation(libs.gson)
@@ -265,39 +257,46 @@ testing {
                 implementation(libs.tinylog.api)
                 implementation(project())
             }
+
+            oci.of(this) {
+                imageDependencies {
+                    runtime("hivemq:hivemq4:latest") { isChanging = true }
+                    runtime("hivemq:hivemq-swarm:latest") { isChanging = true }
+                }
+                val linuxAmd64 = platformSelector(platform("linux", "amd64"))
+                val linuxArm64v8 = platformSelector(platform("linux", "arm64", "v8"))
+                platformSelector = if (System.getenv("CI_RUN") != null) linuxAmd64 else linuxAmd64.and(linuxArm64v8)
+            }
         }
 
         val systemTest by registering(JvmTestSuite::class) {
             testType = TestSuiteType.FUNCTIONAL_TEST
             targets {
                 all {
-                    testTask.configure {
+                    testTask {
                         systemProperties["junit.jupiter.testinstance.lifecycle.default"] = "per_class"
                     }
                 }
                 named("systemTest") {
-                    testTask.configure {
+                    testTask {
                         dependsOn(tasks.shadowJar)
-                        systemProperties["cliExec"] = listOf(
-                            javaLauncher.get().executablePath.asFile.absolutePath,
-                            "-jar",
-                            tasks.shadowJar.map { it.outputs.files.singleFile }.get()
-                        ).joinToString(" ")
+                        systemProperties["cliExec"] = "${javaLauncher.get().executablePath.asFile.absolutePath} -jar ${
+                            tasks.shadowJar.get().archiveFile.get()
+                        }"
                     }
                 }
                 register("systemTestNative") {
-                    testTask.configure {
+                    testTask {
                         dependsOn(tasks.nativeCompile)
-                        systemProperties["cliExec"] = tasks.nativeCompile.map { it.outputs.files.singleFile }.get()
-                            .resolve(project.name).absolutePath
+                        systemProperties["cliExec"] = tasks.nativeCompile.get().outputFile.get().toString()
                     }
                 }
             }
 
             dependencies {
                 implementation(libs.awaitility)
+                implementation(libs.gradleOci.junitJupiter)
                 implementation(libs.hivemq.communityEditionEmbedded)
-                implementation(libs.hivemq.testcontainer.junit5)
                 implementation(libs.junit.pioneer)
                 implementation(libs.junit.platformLauncher)
                 implementation(libs.testcontainers)
@@ -307,6 +306,15 @@ testing {
                 implementation(libs.guava)
                 implementation(libs.hivemq.mqttClient)
             }
+
+            oci.of(this) {
+                imageDependencies {
+                    runtime(project).tag("latest")
+                }
+                val linuxAmd64 = platformSelector(platform("linux", "amd64"))
+                val linuxArm64v8 = platformSelector(platform("linux", "arm64", "v8"))
+                platformSelector = if (System.getenv("CI_RUN") != null) linuxAmd64 else linuxAmd64.and(linuxArm64v8)
+            }
         }
 
         tasks.named("check") {
@@ -315,13 +323,6 @@ testing {
     }
 }
 
-dependencies {
-    modules {
-        module("org.bouncycastle:bcpkix-jdk15on") { replacedBy("org.bouncycastle:bcpkix-jdk18on") }
-        module("org.bouncycastle:bcprov-jdk15on") { replacedBy("org.bouncycastle:bcprov-jdk18on") }
-        module("org.bouncycastle:bcutil-jdk15on") { replacedBy("org.bouncycastle:bcutil-jdk18on") }
-    }
-}
 
 /* ******************** compliance ******************** */
 
@@ -369,9 +370,9 @@ tasks.named("forbiddenApisIntegrationTest") { enabled = false }
 //checks for java installations prior the execution.
 
 cliNative {
-    graalVersion = libs.versions.graal
     javaVersion = libs.versions.javaNative
 }
+val majorJavaNativeVersion = libs.versions.javaNative.get().substringBefore(".")
 
 //reflection configuration files are currently created manually with the command: ./gradlew -Pagent agentMainRun --stacktrace
 //this yields an exception as the Graal plugin is currently quite buggy. The files are created nonetheless.
@@ -380,7 +381,7 @@ val agentMainRun by tasks.registering(JavaExec::class) {
     group = "native"
 
     val launcher = javaToolchains.launcherFor {
-        languageVersion = JavaLanguageVersion.of(libs.versions.javaNative.get())
+        languageVersion = JavaLanguageVersion.of(majorJavaNativeVersion)
         vendor = JvmVendorSpec.GRAAL_VM
     }
     javaLauncher = launcher
@@ -390,12 +391,10 @@ val agentMainRun by tasks.registering(JavaExec::class) {
 
 val nativeImageOptions by graalvmNative.binaries.named("main") {
     javaLauncher = javaToolchains.launcherFor {
-        languageVersion = JavaLanguageVersion.of(libs.versions.javaNative.get())
+        languageVersion = JavaLanguageVersion.of(majorJavaNativeVersion)
         vendor = JvmVendorSpec.GRAAL_VM
     }
     buildArgs.add("-Dio.netty.noUnsafe=true")
-    buildArgs.add("-H:+ReportExceptionStackTraces")
-    buildArgs.add("-H:+TraceServiceLoaderFeature")
     buildArgs.add("--no-fallback")
     buildArgs.add("--enable-https")
     buildArgs.add("--features=com.hivemq.cli.graal.BouncyCastleFeature")
@@ -408,6 +407,7 @@ val nativeImageOptions by graalvmNative.binaries.named("main") {
                 "org.jctools.util.UnsafeAccess," +
                 "io.netty.util.ReferenceCountUtil," +
                 "io.netty.util.ResourceLeakDetector," +
+                "io.netty.util.ResourceLeakDetector\$Level," +
                 "io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueue," +
                 "io.netty.util.internal.shaded.org.jctools.queues.BaseSpscLinkedArrayQueue," +
                 "io.netty.util.internal.shaded.org.jctools.util.UnsafeAccess," +
@@ -415,6 +415,8 @@ val nativeImageOptions by graalvmNative.binaries.named("main") {
                 "io.netty.util.internal.SystemPropertyUtil," +
                 "io.netty.util.internal.PlatformDependent," +
                 "io.netty.util.internal.PlatformDependent0," +
+                "io.netty.util.internal.PlatformDependent\$1," +
+                "io.netty.util.internal.PlatformDependent\$2," +
                 "io.netty.util.internal.logging.JdkLogger," +
                 "io.netty.buffer.AbstractByteBufAllocator"
     )
@@ -477,16 +479,29 @@ val buildBrewZip by tasks.registering(Zip::class) {
     }
 }
 
-val buildBrewFormula by tasks.registering(Sync::class) {
-    dependsOn(buildBrewZip)
-
-    from("packages/homebrew/mqtt-cli.rb")
-    into(layout.buildDirectory.dir("packages/homebrew/formula"))
-    filter {
-        it.replace("@@description@@", project.description!!) //
-            .replace("@@version@@", project.version.toString())
-            .replace("@@filename@@", buildBrewZip.get().archiveFileName.get())
-            .replace("@@shasum@@", sha256Hash(buildBrewZip.get().archiveFile.get().asFile))
+val buildBrewFormula by tasks.registering {
+    val inputFile = layout.projectDirectory.file("packages/homebrew/mqtt-cli.rb")
+    inputs.file(inputFile).withPropertyName("inputFile").withPathSensitivity(PathSensitivity.NONE)
+    val description = provider { project.description!! }
+    inputs.property("description", description)
+    val version = provider { project.version.toString() }
+    inputs.property("version", version)
+    val archiveFileName = buildBrewZip.flatMap { it.archiveFileName }
+    inputs.property("archiveFileName", archiveFileName)
+    val archiveFile = buildBrewZip.flatMap { it.archiveFile }
+    inputs.file(archiveFile).withPropertyName("archiveFile").withPathSensitivity(PathSensitivity.NONE)
+    val outputFile = layout.buildDirectory.file("packages/homebrew/mqtt-cli.rb")
+    outputs.file(outputFile).withPropertyName("outputFile")
+    doLast {
+        val archiveBytes = archiveFile.get().asFile.readBytes()
+        val archiveDigest = MessageDigest.getInstance("SHA-256").digest(archiveBytes)
+        val archiveChecksum = archiveDigest.fold("") { string, b -> string + "%02x".format(b) }
+        val content = inputFile.asFile.readText() //
+            .replace("@@description@@", description.get()) //
+            .replace("@@version@@", version.get()) //
+            .replace("@@filename@@", archiveFileName.get()) //
+            .replace("@@shasum@@", archiveChecksum)
+        outputFile.get().asFile.writeText(content)
     }
 }
 
@@ -509,20 +524,20 @@ ospackage {
     user = "root"
     permissionGroup = "root"
 
-    into("/opt/$packageName")
+    val destinationPath = "/opt/$packageName"
+    into(destinationPath)
     from(tasks.shadowJar)
+    val jarFileName = tasks.shadowJar.flatMap { it.archiveFileName }
     from("packages/linux/mqtt", closureOf<CopySpec> {
-        fileMode = 0b111_101_101 // 0755
-        filter {
-            it.replace("@@jarPath@@", "/opt/$packageName/${tasks.shadowJar.get().archiveFileName.get()}")
-        }
+        filePermissions { unix(0b111_101_101) }
+        filter { it.replace("@@jarPath@@", "$destinationPath/${jarFileName.get()}") }
     })
     from("LICENSE", closureOf<CopySpec> {
         into("licenses")
         CopySpecEnhancement.fileType(this, Directive.LICENSE)
     })
 
-    link("/usr/bin/mqtt", "/opt/$packageName/mqtt", 0b111_101_101)
+    link("/usr/bin/mqtt", "$destinationPath/mqtt", 0b111_101_101)
 }
 
 tasks.buildDeb {
@@ -534,42 +549,50 @@ tasks.buildRpm {
     requires("jre", "1.8.0", Flags.GREATER or Flags.EQUAL)
 }
 
-val buildDebianPackage by tasks.registering(Copy::class) {
-    from(tasks.buildDeb.flatMap { it.archiveFile })
-    into(layout.buildDirectory.dir("packages/debian"))
-    rename { "${project.name}-${project.version}.deb" }
+val buildDebianPackage by tasks.registering {
+    val inputFile = tasks.buildDeb.flatMap { it.archiveFile }
+    inputs.file(inputFile).withPropertyName("inputFile").withPathSensitivity(PathSensitivity.NONE)
+    val outputFile = layout.buildDirectory.file(provider { "packages/debian/${project.name}-${project.version}.deb" })
+    outputs.file(outputFile).withPropertyName("outputFile")
+    doLast {
+        inputFile.get().asFile.copyTo(outputFile.get().asFile, true)
+    }
 }
 
-val buildRpmPackage by tasks.registering(Copy::class) {
-    from(tasks.buildRpm.flatMap { it.archiveFile })
-    into(layout.buildDirectory.dir("packages/rpm"))
-    rename { "${project.name}-${project.version}.rpm" }
+val buildRpmPackage by tasks.registering {
+    val inputFile = tasks.buildRpm.flatMap { it.archiveFile }
+    inputs.file(inputFile).withPropertyName("inputFile").withPathSensitivity(PathSensitivity.NONE)
+    val outputFile = layout.buildDirectory.file(provider { "packages/rpm/${project.name}-${project.version}.rpm" })
+    outputs.file(outputFile).withPropertyName("outputFile")
+    doLast {
+        inputFile.get().asFile.copyTo(outputFile.get().asFile, true)
+    }
 }
 
 /* ******************** windows zip ******************** */
 
 launch4j {
     headerType = "console"
-    mainClassName = application.mainClass.get()
+    mainClassName = application.mainClass
     icon = "$projectDir/icons/05-mqtt-cli-icon.ico"
-    setJarTask(tasks.shadowJar.get())
+    setJarTask(tasks.shadowJar.map { it })
     copyConfigurable = emptyList<Any>()
     copyright = "Copyright 2019-present HiveMQ and the HiveMQ Community"
     companyName = "HiveMQ GmbH"
     downloadUrl = "https://openjdk.java.net/install/"
     jreMinVersion = "1.8"
     windowTitle = "MQTT CLI"
-    version = project.version.toString()
-    textVersion = project.version.toString()
+    version = provider { project.version.toString() }
+    textVersion = provider { project.version.toString() }
 }
 
 val buildWindowsZip by tasks.registering(Zip::class) {
-
     archiveClassifier = "win"
     destinationDirectory = layout.buildDirectory.dir("packages/windows")
 
+    val exeFileName = launch4j.outfile
     from("packages/windows") {
-        filter { it.replace("@@exeName@@", launch4j.outfile.get()) }
+        filter { it.replace("@@exeName@@", exeFileName.get()) }
     }
     from(tasks.createExe.map { it.dest })
     from("LICENSE")
@@ -581,18 +604,11 @@ val buildPackages by tasks.registering {
     dependsOn(buildBrewFormula, buildDebianPackage, buildRpmPackage, buildWindowsZip)
 }
 
-/* ******************** Publish Draft-Release with all packages to GitHub Releases ******************** */
+/* ******************** Attach all packages to GitHub release ******************** */
 
 githubRelease {
     token(System.getenv("githubToken"))
-    draft = true
-    releaseAssets(
-        tasks.shadowJar,
-        buildBrewZip,
-        buildDebianPackage.map { fileTree(it.destinationDir) },
-        buildRpmPackage.map { fileTree(it.destinationDir) },
-        buildWindowsZip,
-    )
+    releaseAssets(tasks.shadowJar, buildBrewZip, buildDebianPackage, buildRpmPackage, buildWindowsZip)
     allowUploadToExisting = true
 }
 
@@ -607,17 +623,47 @@ gitPublish {
 
 /* ******************** docker ******************** */
 
-jib {
-    from {
-        image = "openjdk:11-jre-slim-buster"
-    }
-    to {
-        image = "hivemq/mqtt-cli"
-        tags = setOf(project.version.toString())
-        auth {
-            username = System.getenv("DOCKER_USER") ?: ""
-            password = System.getenv("DOCKER_PASSWORD") ?: ""
+oci {
+    registries {
+        dockerHub {
+            optionalCredentials()
         }
+    }
+    imageDefinitions.register("main") {
+        allPlatforms {
+            dependencies {
+                runtime("library:eclipse-temurin:sha256!ea878d7ef79653c16f6bfdfbd3bf20ae80f4f645f66339e9153ae0d481385225") // 21.0.4_7-jre-jammy
+            }
+            config {
+                entryPoint.add("java")
+                entryPoint.addAll(application.applicationDefaultJvmArgs)
+                entryPoint.addAll("-cp", "/app/classpath/*:/app/libs/*")
+                entryPoint.add(application.mainClass)
+            }
+            layers {
+                layer("libs") {
+                    contents {
+                        from(configurations.runtimeClasspath)
+                        into("app/libs")
+                    }
+                }
+                layer("jar") {
+                    contents {
+                        from(tasks.jar)
+                        into("app/classpath")
+                        rename(".*", "${project.name}-${project.version}.jar")
+                    }
+                }
+                layer("resources") {
+                    contents {
+                        from("src/distribution")
+                        into("app")
+                    }
+                }
+            }
+        }
+        specificPlatform(platform("linux", "amd64"))
+        specificPlatform(platform("linux", "arm64", "v8"))
     }
 }
 
@@ -647,15 +693,6 @@ val updateVersionInFiles by tasks.registering {
             it.writeText(replacedText)
         }
     }
-}
-
-/* ******************** helpers ******************** */
-
-fun sha256Hash(file: File): String {
-    val bytes = file.readBytes()
-    val md = MessageDigest.getInstance("SHA-256")
-    val digest = md.digest(bytes)
-    return digest.fold("") { str, it -> str + "%02x".format(it) }
 }
 
 /* ******************** artifacts ******************** */

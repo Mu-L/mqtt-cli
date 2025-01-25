@@ -11,14 +11,14 @@ jobs:
 
     steps:
       - name: Setup Java
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@7a6d8a8234af8eb26422e24e3006232cccaa061b # v4
         with:
           distribution: 'temurin'
           java-version: |
             8
             11
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           path: mqtt-cli
 
@@ -27,6 +27,6 @@ jobs:
 
       - name: Run Snyk monitor
         shell: bash
-        run: snyk monitor --configuration-matching=^runtimeClasspath$ --target-reference=${{ github.ref_name }} mqtt-cli
+        run: snyk monitor --configuration-matching=^runtimeClasspath$ --target-reference=${{ github.ref_name }} --org=hivemq-releases --project-name=mqtt-cli --remote-repo-url=mqtt-cli --project-lifecycle=production mqtt-cli -d
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}

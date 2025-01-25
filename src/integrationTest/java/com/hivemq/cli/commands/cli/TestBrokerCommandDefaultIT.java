@@ -16,60 +16,49 @@
 
 package com.hivemq.cli.commands.cli;
 
-import com.ginsberg.junit.exit.ExpectSystemExitWithStatus;
 import com.hivemq.cli.MqttCLIMain;
 import com.hivemq.cli.utils.TestLoggerUtils;
-import com.hivemq.testcontainer.junit5.HiveMQTestContainerExtension;
+import io.github.sgtsilvio.gradle.oci.junit.jupiter.OciImages;
 import org.jetbrains.annotations.NotNull;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.utility.DockerImageName;
+import org.testcontainers.hivemq.HiveMQContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @Disabled("Tests are only used to check output")
+@Testcontainers
 class TestBrokerCommandDefaultIT {
 
-    private static final @NotNull HiveMQTestContainerExtension hivemq =
-            new HiveMQTestContainerExtension(DockerImageName.parse("hivemq/hivemq4"));
-
-    @BeforeAll
-    static void beforeAll() {
-        hivemq.start();
-    }
+    @Container
+    private final @NotNull HiveMQContainer hivemq = new HiveMQContainer(OciImages.getImageName("hivemq/hivemq4"));
 
     @BeforeEach
     void setUp() {
         TestLoggerUtils.resetLogger();
     }
 
-    @AfterAll
-    static void afterAll() {
-        hivemq.stop();
-    }
-
     @Test
-    @ExpectSystemExitWithStatus(0)
     void mqtt3_failed_connect() {
-        MqttCLIMain.main("test", "-V", "3");
+        assertEquals(0, MqttCLIMain.mainWithExitCode("test", "-V", "3"));
     }
 
     @Test
-    @ExpectSystemExitWithStatus(0)
     void mqtt5_failed_connect() {
-        MqttCLIMain.main("test", "-V", "5");
+        assertEquals(0, MqttCLIMain.mainWithExitCode("test", "-V", "5"));
     }
 
     @Test
-    @ExpectSystemExitWithStatus(0)
     void mqtt3_features() {
-        MqttCLIMain.main("test", "-V", "3", "-p", String.valueOf(hivemq.getMqttPort()));
+        assertEquals(0, MqttCLIMain.mainWithExitCode("test", "-V", "3", "-p", String.valueOf(hivemq.getMqttPort())));
     }
 
     @Test
-    @ExpectSystemExitWithStatus(0)
     void mqtt5_features() {
-        MqttCLIMain.main("test", "-V", "5", "-a", "-p", String.valueOf(hivemq.getMqttPort()));
+        assertEquals(0,
+                MqttCLIMain.mainWithExitCode("test", "-V", "5", "-a", "-p", String.valueOf(hivemq.getMqttPort())));
     }
 }

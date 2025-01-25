@@ -22,7 +22,7 @@ import com.hivemq.cli.commands.hivemq.datahub.OutputFormatter;
 import com.hivemq.cli.openapi.ApiException;
 import com.hivemq.cli.openapi.JSON;
 import com.hivemq.cli.openapi.hivemq.DataHubSchemasApi;
-import com.hivemq.cli.openapi.hivemq.Schema;
+import com.hivemq.cli.openapi.hivemq.HivemqOpenapiSchema;
 import com.hivemq.cli.rest.HiveMQRestService;
 import com.hivemq.cli.utils.TestLoggerUtils;
 import com.hivemq.cli.utils.json.OffsetDateTimeSerializer;
@@ -55,7 +55,6 @@ public class SchemaCreateCommandTest {
     private final @NotNull HiveMQRestService hiveMQRestService = mock();
     private @NotNull OutputFormatter outputFormatter;
     private final @NotNull ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    private final @NotNull JSON openapiSerialization = new JSON();
     private final @NotNull DataHubSchemasApi schemasApi = mock();
 
     private @NotNull CommandLine commandLine;
@@ -79,14 +78,14 @@ public class SchemaCreateCommandTest {
 
         final Gson gson = new GsonBuilder().disableHtmlEscaping()
                 .registerTypeAdapter(OffsetDateTime.class, new OffsetDateTimeSerializer())
-                .registerTypeAdapter(Schema.class, new SchemaSerializer())
+                .registerTypeAdapter(HivemqOpenapiSchema.class, new SchemaSerializer())
                 .create();
 
         outputFormatter = spy(new OutputFormatter(new PrintStream(outputStream), gson));
         commandLine = new CommandLine(new SchemaCreateCommand(hiveMQRestService, outputFormatter));
 
         when(hiveMQRestService.getSchemasApi(any(), anyDouble())).thenReturn(schemasApi);
-        when(schemasApi.createSchema(any())).thenReturn(new Schema());
+        when(schemasApi.createSchema(any())).thenReturn(new HivemqOpenapiSchema());
     }
 
     @Test
@@ -180,7 +179,7 @@ public class SchemaCreateCommandTest {
                 "\"schemaDefinition\":\"J3t9Jw==\"," +
                 "\"arguments\":{}" +
                 "}";
-        final Schema createdSchema = openapiSerialization.deserialize(apiSchemaResponseJson, Schema.class);
+        final HivemqOpenapiSchema createdSchema = JSON.deserialize(apiSchemaResponseJson, HivemqOpenapiSchema.class);
         when(schemasApi.createSchema(any())).thenReturn(createdSchema);
 
         assertEquals(0, commandLine.execute("--id=s1", "--type=json", "--definition='{}'", "--print-version"));

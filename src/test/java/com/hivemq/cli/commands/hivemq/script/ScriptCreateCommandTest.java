@@ -22,7 +22,7 @@ import com.hivemq.cli.commands.hivemq.datahub.OutputFormatter;
 import com.hivemq.cli.openapi.ApiException;
 import com.hivemq.cli.openapi.JSON;
 import com.hivemq.cli.openapi.hivemq.DataHubScriptsApi;
-import com.hivemq.cli.openapi.hivemq.Script;
+import com.hivemq.cli.openapi.hivemq.HivemqOpenapiScript;
 import com.hivemq.cli.rest.HiveMQRestService;
 import com.hivemq.cli.utils.TestLoggerUtils;
 import com.hivemq.cli.utils.json.ScriptSerializer;
@@ -52,7 +52,6 @@ public class ScriptCreateCommandTest {
     private final @NotNull HiveMQRestService hiveMQRestService = mock();
     private @NotNull OutputFormatter outputFormatter;
     private final @NotNull ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    private final @NotNull JSON openapiSerialization = new JSON();
     private final @NotNull DataHubScriptsApi scriptsApi = mock(DataHubScriptsApi.class);
 
     private @NotNull CommandLine commandLine;
@@ -65,14 +64,14 @@ public class ScriptCreateCommandTest {
         TestLoggerUtils.resetLogger();
 
         final Gson gson = new GsonBuilder().disableHtmlEscaping()
-                .registerTypeAdapter(Script.class, new ScriptSerializer())
+                .registerTypeAdapter(HivemqOpenapiScript.class, new ScriptSerializer())
                 .create();
 
         outputFormatter = spy(new OutputFormatter(new PrintStream(outputStream), gson));
         commandLine = new CommandLine(new ScriptCreateCommand(hiveMQRestService, outputFormatter));
 
         when(hiveMQRestService.getScriptsApi(any(), anyDouble())).thenReturn(scriptsApi);
-        when(scriptsApi.createScript(any())).thenReturn(new Script());
+        when(scriptsApi.createScript(any())).thenReturn(new HivemqOpenapiScript());
     }
 
     @Test
@@ -127,15 +126,14 @@ public class ScriptCreateCommandTest {
 
     @Test
     void execute_printVersionSet_versionPrinted() throws ApiException {
-        final @NotNull String apiScriptResponseJson = "{" +
+        final String apiScriptResponseJson = "{" +
                 "\"id\":\"s1\"," +
                 "\"version\":5," +
                 "\"createdAt\":\"2020-01-02T03:04:05.006Z\"," +
-                "\"type\":\"FUNCTION\"," +
-                "\"scriptDefinition\":\"J2NvbnNvbGUubG9nKCdIZWxsbywgV29ybGQhJyk7\"," +
-                "\"arguments\":{}" +
+                "\"functionType\":\"TRANSFORMATION\"," +
+                "\"source\":\"J2NvbnNvbGUubG9nKCdIZWxsbywgV29ybGQhJyk7\"" +
                 "}";
-        final Script createdScript = openapiSerialization.deserialize(apiScriptResponseJson, Script.class);
+        final HivemqOpenapiScript createdScript = JSON.deserialize(apiScriptResponseJson, HivemqOpenapiScript.class);
         when(scriptsApi.createScript(any())).thenReturn(createdScript);
 
         assertEquals(0,

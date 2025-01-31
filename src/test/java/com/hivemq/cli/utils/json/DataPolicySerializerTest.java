@@ -18,7 +18,7 @@ package com.hivemq.cli.utils.json;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.hivemq.cli.openapi.JSON;
-import com.hivemq.cli.openapi.hivemq.DataPolicy;
+import com.hivemq.cli.openapi.hivemq.HivemqOpenapiDataPolicy;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
@@ -30,9 +30,8 @@ public class DataPolicySerializerTest {
 
     private final @NotNull Gson gson = new GsonBuilder().disableHtmlEscaping()
             .registerTypeAdapter(OffsetDateTime.class, new OffsetDateTimeSerializer())
-            .registerTypeAdapter(DataPolicy.class, new DataPolicySerializer())
+            .registerTypeAdapter(HivemqOpenapiDataPolicy.class, new DataPolicySerializer())
             .create();
-    private final @NotNull JSON openapiSerialization = new JSON();
 
     @Test
     void serialize_allFields_jsonIdentical() {
@@ -43,16 +42,18 @@ public class DataPolicySerializerTest {
                 "\"onSuccess\":{\"pipeline\":[{\"id\":\"success\",\"functionId\":\"successFunction\",\"arguments\":{\"argB\":\"valB\",\"argA\":\"valA\"}}]}," +
                 "\"onFailure\":{\"pipeline\":[{\"id\":\"failure\",\"functionId\":\"failureFunction\",\"arguments\":{\"argA\":\"valA\",\"argB\":\"valB\"}}]}}";
 
-        final DataPolicy policy = openapiSerialization.deserialize(dataPolicyJson, DataPolicy.class);
+        final HivemqOpenapiDataPolicy policy = JSON.deserialize(dataPolicyJson, HivemqOpenapiDataPolicy.class);
         final String serialized = gson.toJson(policy);
         assertEquals(dataPolicyJson, serialized);
     }
 
     @Test
     void serialize_minimalFields_jsonIdentical() {
-        final String policyJson = "{\"id\":\"policy-id\"," + "\"createdAt\":\"2023-01-01T01:02:03.004Z\"}";
+        final String policyJson = "{\"id\":\"policy-id\"," +
+                "\"createdAt\":\"2023-01-01T01:02:03.004Z\"," +
+                "\"matching\":{\"topicFilter\":\"filter\"}}";
 
-        final DataPolicy policy = openapiSerialization.deserialize(policyJson, DataPolicy.class);
+        final HivemqOpenapiDataPolicy policy = JSON.deserialize(policyJson, HivemqOpenapiDataPolicy.class);
         final String serialized = gson.toJson(policy);
         assertEquals(policyJson, serialized);
     }
